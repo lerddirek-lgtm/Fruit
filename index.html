@@ -1,59 +1,271 @@
-<div>Teachable Machine Image Model</div>
-<button type="button" onclick="init()">Start</button>
-<div id="webcam-container"></div>
-<div id="label-container"></div>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
-<script type="text/javascript">
-    // More API functions here:
-    // https://github.com/googlecreativelab/teachablemachine-community/tree/master/libraries/image
-
-    // the link to your model provided by Teachable Machine export panel
-    const URL = "https://teachablemachine.withgoogle.com/models/pfr7PNmqB/";
-
-    let model, webcam, labelContainer, maxPredictions;
-
-    // Load the image model and setup the webcam
-    async function init() {
-        const modelURL = URL + "model.json";
-        const metadataURL = URL + "metadata.json";
-
-        // load the model and metadata
-        // Refer to tmImage.loadFromFiles() in the API to support files from a file picker
-        // or files from your local hard drive
-        // Note: the pose library adds "tmImage" object to your window (window.tmImage)
-        model = await tmImage.load(modelURL, metadataURL);
-        maxPredictions = model.getTotalClasses();
-
-        // Convenience function to setup a webcam
-        const flip = true; // whether to flip the webcam
-        webcam = new tmImage.Webcam(200, 200, flip); // width, height, flip
-        await webcam.setup(); // request access to the webcam
-        await webcam.play();
-        window.requestAnimationFrame(loop);
-
-        // append elements to the DOM
-        document.getElementById("webcam-container").appendChild(webcam.canvas);
-        labelContainer = document.getElementById("label-container");
-        for (let i = 0; i < maxPredictions; i++) { // and class labels
-            labelContainer.appendChild(document.createElement("div"));
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teachable Machine - วิเคราะห์รูปภาพ</title>
+    <!-- นำเข้าฟอนต์ภาษาไทยสวยๆ จาก Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Prompt', sans-serif;
         }
-    }
 
-    async function loop() {
-        webcam.update(); // update the webcam frame
-        await predict();
-        window.requestAnimationFrame(loop);
-    }
-
-    // run the webcam image through the image model
-    async function predict() {
-        // predict can take in an image, video or canvas html element
-        const prediction = await model.predict(webcam.canvas);
-        for (let i = 0; i < maxPredictions; i++) {
-            const classPrediction =
-                prediction[i].className + ": " + prediction[i].probability.toFixed(2);
-            labelContainer.childNodes[i].innerHTML = classPrediction;
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
         }
-    }
-</script>
+
+        .card {
+            background: #ffffff;
+            width: 100%;
+            max-width: 480px;
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            padding: 35px 30px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #2d3748;
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        p.subtitle {
+            color: #718096;
+            font-size: 0.95rem;
+            margin-bottom: 25px;
+        }
+
+        /* พื้นที่อัปโหลดรูปภาพ */
+        .upload-area {
+            border: 2px dashed #cbd5e0;
+            border-radius: 15px;
+            padding: 30px 20px;
+            background-color: #f8fafc;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .upload-area:hover {
+            border-color: #4299e1;
+            background-color: #ebf8ff;
+        }
+
+        .upload-icon {
+            font-size: 40px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .upload-text {
+            color: #4a5568;
+            font-size: 0.95rem;
+        }
+
+        .upload-text span {
+            color: #3182ce;
+            font-weight: 600;
+            text-decoration: underline;
+        }
+
+        /* ซ่อน input file เดิม */
+        #image-upload {
+            display: none;
+        }
+
+        /* ส่วนแสดงภาพตัวอย่าง */
+        #preview-container {
+            margin-top: 20px;
+            display: none;
+        }
+
+        #image-preview {
+            max-width: 100%;
+            max-height: 280px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            object-fit: contain;
+        }
+
+        /* สถานะการโหลด */
+        #status {
+            margin-top: 15px;
+            font-size: 0.9rem;
+            color: #3182ce;
+            font-weight: 400;
+        }
+
+        /* ส่วนแสดงผลลัพธ์การทำนาย */
+        #label-container {
+            margin-top: 25px;
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .result-item {
+            background: #f7fafc;
+            padding: 12px 15px;
+            border-radius: 10px;
+            border: 1px solid #edf2f7;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .progress-bg {
+            width: 100%;
+            height: 10px;
+            background-color: #e2e8f0;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4299e1, #3182ce);
+            border-radius: 5px;
+            transition: width 0.4s ease;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h1>วิเคราะห์รูปภาพด้วย AI</h1>
+        <p class="subtitle">อัปโหลดรูปภาพเพื่อตรวจสอบผลลัพธ์จากโมเดล</p>
+
+        <!-- กล่องคลิกสำหรับเลือกรูป -->
+        <label for="image-upload" class="upload-area" id="drop-area">
+            <span class="upload-icon">🖼️</span>
+            <div class="upload-text">คลิกเพื่อ <span>เลือกรูปภาพ</span> จากเครื่องของคุณ</div>
+        </label>
+        <input type="file" id="image-upload" accept="image/*" onchange="handleImageUpload(event)">
+
+        <!-- ข้อความแจ้งสถานะ -->
+        <div id="status">กำลังโหลดโมเดล AI...</div>
+
+        <!-- พื้นที่แสดงรูปที่เลือก -->
+        <div id="preview-container">
+            <img id="image-preview" src="" alt="รูปภาพตัวอย่าง">
+        </div>
+
+        <!-- พื้นที่แสดงผลลัพธ์ -->
+        <div id="label-container"></div>
+    </div>
+
+    <!-- นำเข้าไลบรารี TensorFlow.js และ Teachable Machine -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+    <script type="text/javascript">
+        // ลิงก์โมเดลเดิมของคุณ
+        const URL = "https://teachablemachine.withgoogle.com/models/pfr7PNmqB/";
+
+        let model, maxPredictions;
+
+        // 1. โหลดโมเดลทันทีที่เปิดหน้าเว็บ
+        async function loadModel() {
+            const statusText = document.getElementById("status");
+            try {
+                const modelURL = URL + "model.json";[cite: 1]
+                const metadataURL = URL + "metadata.json";[cite: 1]
+                
+                model = await tmImage.load(modelURL, metadataURL);[cite: 1]
+                maxPredictions = model.getTotalClasses();[cite: 1]
+                
+                statusText.innerText = "✅ โมเดลพร้อมใช้งานแล้ว กรุณาเลือกรูปภาพ";
+                statusText.style.color = "#38a169";
+            } catch (error) {
+                statusText.innerText = "❌ เกิดข้อผิดพลาดในการโหลดโมเดล";
+                statusText.style.color = "#e53e3e";
+                console.error(error);
+            }
+        }
+
+        // เรียกใช้ฟังก์ชันโหลดโมเดลเมื่อเปิดหน้าเว็บ
+        window.onload = loadModel;
+
+        // 2. จัดการเมื่อผู้ใช้เลือกรูปภาพ
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const imgElement = document.getElementById("image-preview");
+                const previewContainer = document.getElementById("preview-container");
+                
+                imgElement.src = e.target.result;
+                previewContainer.style.display = "block";
+
+                // รอให้รูปภาพโหลดลงในแท็ก <img> เสร็จก่อน แล้วค่อยส่งให้ AI วิเคราะห์
+                imgElement.onload = async function() {
+                    await predict(imgElement);
+                };
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 3. ส่งรูปภาพเข้าโมเดลเพื่อทำนายผล
+        async function predict(imageElement) {
+            if (!model) {
+                alert("กรุณารอสักครู่ โมเดลกำลังโหลด...");
+                return;
+            }
+
+            const statusText = document.getElementById("status");
+            statusText.innerText = "⏳ กำลังวิเคราะห์รูปภาพ...";
+            statusText.style.color = "#3182ce";
+
+            // ทำนายผลจากแท็ก <img>
+            const prediction = await model.predict(imageElement);
+            const labelContainer = document.getElementById("label-container");
+            labelContainer.innerHTML = ""; // ล้างผลลัพธ์เก่าออก
+
+            // เรียงลำดับผลลัพธ์จากเปอร์เซ็นต์มากไปน้อย
+            prediction.sort((a, b) => b.probability - a.probability);
+
+            for (let i = 0; i < maxPredictions; i++) {
+                const className = prediction[i].className;
+                const percentage = (prediction[i].probability * 100).toFixed(1);
+
+                // สร้างกล่องแสดงผลพร้อมแถบเปอร์เซ็นต์
+                const itemDiv = document.createElement("div");
+                itemDiv.className = "result-item";
+                itemDiv.innerHTML = `
+                    <div class="result-header">
+                        <span>${className}</span>
+                        <span>${percentage}%</span>
+                    </div>
+                    <div class="progress-bg">
+                        <div class="progress-fill" style="width: ${percentage}%;"></div>
+                    </div>
+                `;
+                labelContainer.appendChild(itemDiv);
+            }
+
+            statusText.innerText = "✨ วิเคราะห์เสร็จสิ้น";
+            statusText.style.color = "#38a169";
+        }
+    </script>
+</body>
+</html>
